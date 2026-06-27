@@ -9,14 +9,16 @@ DATA_FILE = "online_finance.csv"
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
     # Incomes
-    {"Type": "Income", "Category": "Salary", "Amount": 5000.00, "Description": "Monthly Fixed Salary"},
+    {"Type": "Income", "Category": "Salary", "Amount": 13800.00, "Description": "Monthly Fixed Salary"},
+    {"Type": "Income", "Category": "Salary", "Amount": 2913.00, "Description": "Monthly Fixed Salary"},
     
     # Expenses
-    {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 1200.00, "Description": "Monthly Home Rent"},
-    {"Type": "Expense", "Category": "School Fees", "Amount": 400.00, "Description": "Kids School Fees"},
+    {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 210.00, "Description": "Monthly Home Utilities"},
+    {"Type": "Expense", "Category": "School Fees", "Amount": 408.50, "Description": "Kids School Fees"},
     {"Type": "Expense", "Category": "Internet", "Amount": 60.00, "Description": "Home Fiber Broadband"},
-    {"Type": "Expense", "Category": "Phone", "Amount": 45.00, "Description": "Mobile Phone Plan"},
-    {"Type": "Expense", "Category": "Insurance", "Amount": 150.00, "Description": "Health & Car Premium"},
+    {"Type": "Expense", "Category": "Phone", "Amount": 138.00, "Description": "Mobile Phone Plan"},
+    {"Type": "Expense", "Category": "Other", "Amount": 735.00, "Description": "Helper"},
+    {"Type": "Expense", "Category": "Motor Vehicle", "Amount": 110.00, "Description": "Season Parking"},
 ]
 
 def check_and_add_recurring_items(user_entry_date=None):
