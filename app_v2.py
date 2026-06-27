@@ -9,8 +9,7 @@ DATA_FILE = "online_finance.csv"
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
     # Incomes
-    {"Type": "Income", "Category": "Salary", "Amount": 13800.00, "Description": "Monthly Fixed Salary"},
-    {"Type": "Income", "Category": "Salary", "Amount": 2913.00, "Description": "Monthly Fixed Salary"},
+    {"Type": "Income", "Category": "Salary", "Amount": 5000.00, "Description": "Monthly Fixed Salary"},
     
     # Expenses
     {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 1200.00, "Description": "Monthly Home Rent"},
@@ -20,34 +19,49 @@ DEFAULT_ITEMS = [
     {"Type": "Expense", "Category": "Insurance", "Amount": 150.00, "Description": "Health & Car Premium"},
 ]
 
-def check_and_add_recurring_items():
-    """Checks if recurring items for the current month exist. If not, adds them automatically."""
+def check_and_add_recurring_items(user_entry_date=None):
+    """
+    Scans the timeline and ensures defaults exist for the current month,
+    the month of any new entry being saved, and any gaps in between.
+    """
     df = pd.read_csv(DATA_FILE)
-    current_month_str = datetime.today().strftime("%Y-%m")
     
-    is_month_logged = False
+    current_month = datetime.today().strftime("%Y-%m")
+    target_months = {current_month}
+    
+    if user_entry_date:
+        target_months.add(user_entry_date[:7])
+        
     if not df.empty:
         df_months = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m")
-        if current_month_str in df_months.values:
-            is_month_logged = True
-            
-    if not is_month_logged:
-        default_date = f"{current_month_str}-01"
-        new_rows = []
+        existing_months = set(df_months.values)
+        oldest_date_str = df_months.min()
         
-        for item in DEFAULT_ITEMS:
-            new_rows.append([
-                default_date, 
-                item["Type"], 
-                item["Category"], 
-                item["Amount"], 
-                item["Description"]
-            ])
-            
+        all_periods = pd.period_range(start=oldest_date_str, end=current_month, freq='M').astype(str)
+        target_months.update(all_periods)
+    else:
+        existing_months = set()
+
+    missing_months = sorted(list(target_months - existing_months))
+    
+    if missing_months:
+        new_rows = []
+        for month_str in missing_months:
+            default_date = f"{month_str}-01"
+            for item in DEFAULT_ITEMS:
+                new_rows.append([
+                    default_date, 
+                    item["Type"], 
+                    item["Category"], 
+                    item["Amount"], 
+                    item["Description"]
+                ])
+                
         recurring_df = pd.DataFrame(new_rows, columns=["Date", "Type", "Category", "Amount", "Description"])
         df = pd.concat([df, recurring_df], ignore_index=True)
+        df = df.sort_values(by="Date").reset_index(drop=True)
         df.to_csv(DATA_FILE, index=False)
-        st.info(f"✨ Automated recurring items for {current_month_str} have been added to your database!")
+        st.info(f"✨ Automated recurring items for missing months ({', '.join(missing_months)}) initialized!")
 
 # Ensure CSV structure exists
 if not os.path.exists(DATA_FILE):
@@ -87,10 +101,14 @@ with st.form("entry_form", clear_on_submit=True):
         
     submitted = st.form_submit_button("Save Transaction")
     if submitted:
-        new_data = pd.DataFrame([[t_date.strftime("%Y-%m-%d"), t_type, category, amount, description]], 
+        date_str = t_date.strftime("%Y-%m-%d")
+        check_and_add_recurring_items(user_entry_date=date_str)
+        
+        new_data = pd.DataFrame([[date_str, t_type, category, amount, description]], 
                                 columns=["Date", "Type", "Category", "Amount", "Description"])
         df = pd.read_csv(DATA_FILE)
         df = pd.concat([df, new_data], ignore_index=True)
+        df = df.sort_values(by="Date").reset_index(drop=True)
         df.to_csv(DATA_FILE, index=False)
         st.success("Transaction saved successfully!")
         st.rerun()
@@ -113,15 +131,13 @@ if not df.empty:
     exp = filtered_df[filtered_df["Type"] == "Expense"]["Amount"].sum()
     net = inc - exp
     
-    # FEATURE UPDATE: Calculate Monthly Savings Rate Percentage
     if inc > 0:
         savings_rate = (net / inc) * 100
-        # Prevent showing negative savings rate percentages
         savings_rate_display = f"{max(0.0, savings_rate):.1f}%"
     else:
         savings_rate_display = "0.0%"
     
-    # KPI metrics display (Adjusted grid structure to 4 columns)
+    # KPI metrics display
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Income", f"${inc:,.2f}")
     c2.metric("Total Expenses", f"${exp:,.2f}")
@@ -170,40 +186,46 @@ if not df.empty:
             )
         
     with right:
-        st.subheader("Expense Breakdown")
-        exp_df = filtered_df[filtered_df["Type"] == "Expense"]
+        st.subheader("Financial Breakdown")
+        chart_type = st.selectbox("Choose Chart Type", ["Bar Chart", "Pie Chart"])
         
-        if not exp_df.empty:
-            chart_type = st.selectbox("Choose Chart Type", ["Bar Chart", "Pie Chart"])
-            cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
-            
-            if chart_type == "Bar Chart":
+        exp_df = filtered_df[filtered_df["Type"] == "Expense"]
+        cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
+        
+        if chart_type == "Bar Chart":
+            if not cat_totals.empty:
                 st.bar_chart(data=cat_totals, x="Category", y="Amount")
             else:
+                st.write("No expenses logged for this month.")
+        else:
+            # --- FEATURE UPDATE: Income-centric Pie Chart Allocation ---
+            if inc > 0:
+                pie_data = cat_totals.copy()
+                
+                # Append remaining balance/savings if there is any profit left
+                if net > 0:
+                    savings_row = pd.DataFrame([{"Category": "Savings/Balance", "Amount": net}])
+                    pie_data = pd.concat([pie_data, savings_row], ignore_index=True)
+                
+                # Render Pie Chart where total 360-degree circle equals Total Income
+                pie_chart = alt.Chart(pie_data).mark_arc().encode(
+                    theta=alt.Theta(field="Amount", type="quantitative"),
+                    color=alt.Color(field="Category", type="nominal", 
+                                    scale=alt.Scale(range=['#2ca02c' if c == 'Savings/Balance' else None for c in pie_data['Category']])),
+                    tooltip=["Category", "Amount"]
+                ).properties(height=350)
+                st.altair_chart(pie_chart, use_container_width=True)
+            elif not cat_totals.empty:
+                # Fallback layout: if no income logged, show simple expense-only pie
                 pie_chart = alt.Chart(cat_totals).mark_arc().encode(
                     theta=alt.Theta(field="Amount", type="quantitative"),
                     color=alt.Color(field="Category", type="nominal"),
                     tooltip=["Category", "Amount"]
                 ).properties(height=350)
                 st.altair_chart(pie_chart, use_container_width=True)
-        else:
-            st.write("No expenses logged for this month.")
+            else:
+                st.write("No income or expense records found to generate a pie chart.")
 else:
     st.info("Start tracking by logging your first transaction above!")
 
 # --- Danger Zone (Clear Database with Password Verification) ---
-st.markdown("<br><br>", unsafe_allow_html=True) 
-with st.expander("⚠️ Danger Zone (Admin Actions)"):
-    st.write("Permanently erase all logged items across all history. This cannot be undone.")
-    confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
-    
-    input_password = st.text_input("Enter Admin Password to verify action:", type="password")
-    is_password_correct = (input_password == "1111")
-    button_disabled = not (confirm_clear and is_password_correct)
-    
-    if st.button("Delete All Records", disabled=button_disabled, type="primary"):
-        pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
-        st.success("Database cleared successfully!")
-        st.rerun()
-    elif confirm_clear and input_password and not is_password_correct:
-        st.error("Incorrect password. Please try again.")
