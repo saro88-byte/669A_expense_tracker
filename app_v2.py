@@ -64,7 +64,7 @@ if not df.empty:
     c3.metric("Net Profit", f"${net:,.2f}", delta=f"{net:,.2f}")
     
     # Visual Layout Split
-    left, right = st.columns()
+    left, right = st.columns(2)
     with left:
         st.subheader(f"Transactions for {selected_month}")
         display_df = filtered_df.copy()
