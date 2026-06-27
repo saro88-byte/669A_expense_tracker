@@ -208,11 +208,10 @@ if not df.empty:
                     savings_row = pd.DataFrame([{"Category": "Savings/Balance", "Amount": net}])
                     pie_data = pd.concat([pie_data, savings_row], ignore_index=True)
                 
-                # Render Pie Chart where total circle equals Total Income
+                # Render clean Pie Chart via standard color encoding mapping
                 pie_chart = alt.Chart(pie_data).mark_arc().encode(
                     theta=alt.Theta(field="Amount", type="quantitative"),
-                    color=alt.Color(field="Category", type="nominal", 
-                                    scale=alt.Scale(range=['#2ca02c' if c == 'Savings/Balance' else None for c in pie_data['Category']])),
+                    color=alt.Color(field="Category", type="nominal"),
                     tooltip=["Category", "Amount"]
                 ).properties(height=350)
                 st.altair_chart(pie_chart, use_container_width=True)
@@ -243,4 +242,6 @@ with st.expander("⚠️ Danger Zone (Admin Actions)"):
         st.success("Database cleared successfully!")
         st.rerun()
     elif confirm_clear and input_password and not is_password_correct:
+        st.error("Incorrect password. Please try again.")
+
         st.error("Incorrect password. Please try again.")
