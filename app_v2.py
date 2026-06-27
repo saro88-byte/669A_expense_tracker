@@ -71,30 +71,45 @@ if not df.empty:
         display_df = filtered_df.copy()
         display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
         clean_df = display_df.drop(columns=["YearMonth"])
-        st.dataframe(clean_df, use_container_width=True)
         
-        # Feature 1: Download Monthly Data
-        csv_data = clean_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label=f"📥 Download {selected_month} Data (CSV)",
-            data=csv_data,
-            file_name=f"finance_data_{selected_month}.csv",
-            mime="text/csv",
-        )
+        # FEATURE UPDATE: Interactive Spreadsheet Editor
+        st.info("💡 Double-click any cell below to edit its contents directly!")
+        edited_df = st.data_editor(clean_df, use_container_width=True)
+        
+        # Save and Download Buttons Layout
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("💾 Save Table Edits", type="secondary", use_container_width=True):
+                # Reload master csv to apply changes perfectly
+                master_df = pd.read_csv(DATA_FILE)
+                # Map the edited data columns back using matching index numbers
+                columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
+                master_df.loc[edited_df.index, columns_to_update] = edited_df[columns_to_update]
+                master_df.to_csv(DATA_FILE, index=False)
+                st.success("Changes saved successfully!")
+                st.rerun()
+                
+        with btn_col2:
+            csv_data = clean_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label=f"📥 Download {selected_month} (CSV)",
+                data=csv_data,
+                file_name=f"finance_data_{selected_month}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
         
     with right:
         st.subheader("Expense Breakdown")
         exp_df = filtered_df[filtered_df["Type"] == "Expense"]
         
         if not exp_df.empty:
-            # Interactive Chart Toggle
             chart_type = st.selectbox("Choose Chart Type", ["Bar Chart", "Pie Chart"])
             cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
             
             if chart_type == "Bar Chart":
                 st.bar_chart(data=cat_totals, x="Category", y="Amount")
             else:
-                # Lightweight interactive pie chart using native Altair
                 pie_chart = alt.Chart(cat_totals).mark_arc().encode(
                     theta=alt.Theta(field="Amount", type="quantitative"),
                     color=alt.Color(field="Category", type="nominal"),
@@ -106,8 +121,8 @@ if not df.empty:
 else:
     st.info("Start tracking by logging your first transaction above!")
 
-# --- Feature 2: Danger Zone (Clear Database) ---
-st.markdown("<br><br>", unsafe_allow_html=True) # Add layout spacing
+# --- Danger Zone (Clear Database) ---
+st.markdown("<br><br>", unsafe_allow_html=True) 
 with st.expander("⚠️ Danger Zone (Admin Actions)"):
     st.write("Permanently erase all logged items across all history. This cannot be undone.")
     confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
