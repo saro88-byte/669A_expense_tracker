@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 import os
 from datetime import datetime
 
@@ -84,9 +85,22 @@ if not df.empty:
     with right:
         st.subheader("Expense Breakdown")
         exp_df = filtered_df[filtered_df["Type"] == "Expense"]
+        
         if not exp_df.empty:
-            cat_totals = exp_df.groupby("Category")["Amount"].sum()
-            st.bar_chart(cat_totals)
+            # Interactive Chart Toggle
+            chart_type = st.selectbox("Choose Chart Type", ["Bar Chart", "Pie Chart"])
+            cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
+            
+            if chart_type == "Bar Chart":
+                st.bar_chart(data=cat_totals, x="Category", y="Amount")
+            else:
+                # Lightweight interactive pie chart using native Altair
+                pie_chart = alt.Chart(cat_totals).mark_arc().encode(
+                    theta=alt.Theta(field="Amount", type="quantitative"),
+                    color=alt.Color(field="Category", type="nominal"),
+                    tooltip=["Category", "Amount"]
+                ).properties(height=350)
+                st.altair_chart(pie_chart, use_container_width=True)
         else:
             st.write("No expenses logged for this month.")
 else:
