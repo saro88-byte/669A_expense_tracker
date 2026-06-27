@@ -72,7 +72,6 @@ if not df.empty:
         display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
         clean_df = display_df.drop(columns=["YearMonth"])
         
-        # FEATURE UPDATE: Interactive Spreadsheet Editor
         st.info("💡 Double-click any cell below to edit its contents directly!")
         edited_df = st.data_editor(clean_df, use_container_width=True)
         
@@ -80,9 +79,7 @@ if not df.empty:
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             if st.button("💾 Save Table Edits", type="secondary", use_container_width=True):
-                # Reload master csv to apply changes perfectly
                 master_df = pd.read_csv(DATA_FILE)
-                # Map the edited data columns back using matching index numbers
                 columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
                 master_df.loc[edited_df.index, columns_to_update] = edited_df[columns_to_update]
                 master_df.to_csv(DATA_FILE, index=False)
@@ -121,12 +118,24 @@ if not df.empty:
 else:
     st.info("Start tracking by logging your first transaction above!")
 
-# --- Danger Zone (Clear Database) ---
+# --- Danger Zone (Clear Database with Password Verification) ---
 st.markdown("<br><br>", unsafe_allow_html=True) 
-with st.expander("⚠️ Danger Zone (Admin Actions)"):
+with st.expander("⚠️ Danger Zone (Admin ACCESS only)"):
     st.write("Permanently erase all logged items across all history. This cannot be undone.")
     confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
-    if st.button("Delete All Records", disabled=not confirm_clear, type="primary"):
+    
+    # Password Field Entry (hidden input characters)
+    input_password = st.text_input("Enter Admin Password to verify action:", type="password")
+    
+    # Check if the user entered the correct updated PIN
+    is_password_correct = (input_password == "1111")
+    
+    # Button only unlocks when confirmed AND password matches perfectly
+    button_disabled = not (confirm_clear and is_password_correct)
+    
+    if st.button("Delete All Records", disabled=button_disabled, type="primary"):
         pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
         st.success("Database cleared successfully!")
         st.rerun()
+    elif confirm_clear and input_password and not is_password_correct:
+        st.error("Incorrect password. Please try again.")
