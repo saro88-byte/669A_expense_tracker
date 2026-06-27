@@ -10,7 +10,7 @@ if not os.path.exists(DATA_FILE):
     pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
 
 st.set_page_config(layout="wide")
-st.title("🌐 Online Expense & Income Tracker")
+st.title("Saj Family Finance Tracker")
 
 # --- Interactive Filter (Outside Form) ---
 t_type = st.radio("Select Transaction Type:", ["Expense", "Income"], horizontal=True)
