@@ -6,9 +6,54 @@ from datetime import datetime
 
 DATA_FILE = "online_finance.csv"
 
-# Ensure CSV structure exists with a primary unique ID column for reliable tracking
+# --- RECURRING MONTHLY DEFAULTS ---
+DEFAULT_ITEMS = [
+    # Incomes
+    {"Type": "Income", "Category": "Salary", "Amount": 5000.00, "Description": "Monthly Fixed Salary"},
+    
+    # Expenses
+    {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 1200.00, "Description": "Monthly Home Rent"},
+    {"Type": "Expense", "Category": "School Fees", "Amount": 400.00, "Description": "Kids School Fees"},
+    {"Type": "Expense", "Category": "Internet", "Amount": 60.00, "Description": "Home Fiber Broadband"},
+    {"Type": "Expense", "Category": "Phone", "Amount": 45.00, "Description": "Mobile Phone Plan"},
+    {"Type": "Expense", "Category": "Insurance", "Amount": 150.00, "Description": "Health & Car Premium"},
+]
+
+def check_and_add_recurring_items():
+    """Checks if recurring items for the current month exist. If not, adds them automatically."""
+    df = pd.read_csv(DATA_FILE)
+    current_month_str = datetime.today().strftime("%Y-%m")
+    
+    is_month_logged = False
+    if not df.empty:
+        df_months = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m")
+        if current_month_str in df_months.values:
+            is_month_logged = True
+            
+    if not is_month_logged:
+        default_date = f"{current_month_str}-01"
+        new_rows = []
+        
+        for item in DEFAULT_ITEMS:
+            new_rows.append([
+                default_date, 
+                item["Type"], 
+                item["Category"], 
+                item["Amount"], 
+                item["Description"]
+            ])
+            
+        recurring_df = pd.DataFrame(new_rows, columns=["Date", "Type", "Category", "Amount", "Description"])
+        df = pd.concat([df, recurring_df], ignore_index=True)
+        df.to_csv(DATA_FILE, index=False)
+        st.info(f"✨ Automated recurring items for {current_month_str} have been added to your database!")
+
+# Ensure CSV structure exists
 if not os.path.exists(DATA_FILE):
     pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
+
+# Run the automatic recurring items checker on script bootup
+check_and_add_recurring_items()
 
 st.set_page_config(layout="wide")
 st.title("Saj Family Finance Tracker")
@@ -67,11 +112,20 @@ if not df.empty:
     exp = filtered_df[filtered_df["Type"] == "Expense"]["Amount"].sum()
     net = inc - exp
     
-    # KPI metrics display
-    c1, c2, c3 = st.columns(3)
+    # FEATURE UPDATE: Calculate Monthly Savings Rate Percentage
+    if inc > 0:
+        savings_rate = (net / inc) * 100
+        # Prevent showing negative savings rate percentages
+        savings_rate_display = f"{max(0.0, savings_rate):.1f}%"
+    else:
+        savings_rate_display = "0.0%"
+    
+    # KPI metrics display (Adjusted grid structure to 4 columns)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Income", f"${inc:,.2f}")
     c2.metric("Total Expenses", f"${exp:,.2f}")
     c3.metric("Net Profit", f"${net:,.2f}", delta=f"{net:,.2f}")
+    c4.metric("Savings Rate", savings_rate_display, delta="Target: >20%" if inc > 0 else None, delta_color="off")
     
     # Visual Layout Split
     left, right = st.columns(2)
@@ -81,7 +135,6 @@ if not df.empty:
         display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
         clean_df = display_df.drop(columns=["YearMonth"])
         
-        # FEATURE UPDATE: Interactive Spreadsheet Editor with Row Deletion Allowed
         st.info("💡 Edit cells directly or select a row and press 'Delete' on your keyboard. Click 'Save' below.")
         edited_df = st.data_editor(clean_df, use_container_width=True, num_rows="dynamic")
         
@@ -91,15 +144,12 @@ if not df.empty:
             if st.button("💾 Save Table Changes", type="secondary", use_container_width=True):
                 master_df = pd.read_csv(DATA_FILE)
                 
-                # Identify rows that were dropped/deleted during the session
                 remaining_indices = edited_df.index
                 deleted_indices = [idx for idx in clean_df.index if idx not in remaining_indices]
                 
-                # Delete rows from master tracking file
                 if deleted_indices:
                     master_df = master_df.drop(index=deleted_indices)
                 
-                # Update any edited contents for remaining rows
                 columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
                 if not edited_df.empty:
                     master_df.loc[edited_df.index, columns_to_update] = edited_df[columns_to_update]
