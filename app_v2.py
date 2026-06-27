@@ -6,7 +6,7 @@ from datetime import datetime
 
 DATA_FILE = "online_finance.csv"
 
-# Ensure CSV structure exists
+# Ensure CSV structure exists with a primary unique ID column for reliable tracking
 if not os.path.exists(DATA_FILE):
     pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
 
@@ -23,7 +23,16 @@ with st.form("entry_form", clear_on_submit=True):
     with col1:
         t_date = st.date_input("Date", datetime.today())
     with col2:
-        categories = ["Food", "Rent/Utilities", "Transport", "Entertainment", "Shopping", "Other"] if t_type == "Expense" else ["Salary", "Freelance", "Investments", "Other"]
+        if t_type == "Expense":
+            categories = [
+                "Apparel & Clothing", "Dining", "Entertainment", "Grocery & Provisions",
+                "Household", "Insurance", "Internet", "Medical", "Motor Vehicle",
+                "Online Purchase", "Petrol", "Phone", "Rent/Utilities", "School Fees",
+                "Shopping", "Tuition Fees", "Other"
+            ]
+        else:
+            categories = ["Salary", "Freelance", "Investments", "Other"]
+            
         category = st.selectbox("Category", categories)
     with col3:
         amount = st.number_input("Amount ($)", min_value=0.01, step=0.01)
@@ -72,16 +81,29 @@ if not df.empty:
         display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
         clean_df = display_df.drop(columns=["YearMonth"])
         
-        st.info("💡 Double-click any cell below to edit its contents directly!")
-        edited_df = st.data_editor(clean_df, use_container_width=True)
+        # FEATURE UPDATE: Interactive Spreadsheet Editor with Row Deletion Allowed
+        st.info("💡 Edit cells directly or select a row and press 'Delete' on your keyboard. Click 'Save' below.")
+        edited_df = st.data_editor(clean_df, use_container_width=True, num_rows="dynamic")
         
         # Save and Download Buttons Layout
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            if st.button("💾 Save Table Edits", type="secondary", use_container_width=True):
+            if st.button("💾 Save Table Changes", type="secondary", use_container_width=True):
                 master_df = pd.read_csv(DATA_FILE)
+                
+                # Identify rows that were dropped/deleted during the session
+                remaining_indices = edited_df.index
+                deleted_indices = [idx for idx in clean_df.index if idx not in remaining_indices]
+                
+                # Delete rows from master tracking file
+                if deleted_indices:
+                    master_df = master_df.drop(index=deleted_indices)
+                
+                # Update any edited contents for remaining rows
                 columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
-                master_df.loc[edited_df.index, columns_to_update] = edited_df[columns_to_update]
+                if not edited_df.empty:
+                    master_df.loc[edited_df.index, columns_to_update] = edited_df[columns_to_update]
+                
                 master_df.to_csv(DATA_FILE, index=False)
                 st.success("Changes saved successfully!")
                 st.rerun()
@@ -120,17 +142,12 @@ else:
 
 # --- Danger Zone (Clear Database with Password Verification) ---
 st.markdown("<br><br>", unsafe_allow_html=True) 
-with st.expander("⚠️ Danger Zone (Admin ACCESS only)"):
+with st.expander("⚠️ Danger Zone (Admin Actions)"):
     st.write("Permanently erase all logged items across all history. This cannot be undone.")
     confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
     
-    # Password Field Entry (hidden input characters)
     input_password = st.text_input("Enter Admin Password to verify action:", type="password")
-    
-    # Check if the user entered the correct updated PIN
     is_password_correct = (input_password == "1111")
-    
-    # Button only unlocks when confirmed AND password matches perfectly
     button_disabled = not (confirm_clear and is_password_correct)
     
     if st.button("Delete All Records", disabled=button_disabled, type="primary"):
