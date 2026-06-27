@@ -9,7 +9,8 @@ DATA_FILE = "online_finance.csv"
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
     # Incomes
-    {"Type": "Income", "Category": "Salary", "Amount": 5000.00, "Description": "Monthly Fixed Salary"},
+    {"Type": "Income", "Category": "Salary", "Amount": 13800.00, "Description": "Monthly Fixed Salary"},
+    {"Type": "Income", "Category": "Salary", "Amount": 2913.00, "Description": "Monthly Fixed Salary"},
     
     # Expenses
     {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 1200.00, "Description": "Monthly Home Rent"},
