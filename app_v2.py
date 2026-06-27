@@ -114,7 +114,6 @@ with st.form("entry_form", clear_on_submit=True):
         df.to_csv(DATA_FILE, index=False)
         st.success("Transaction saved successfully!")
         st.rerun()
-
 # --- Data & Visuals Section ---
 df = pd.read_csv(DATA_FILE)
 
@@ -200,7 +199,7 @@ if not df.empty:
             else:
                 st.write("No expenses logged for this month.")
         else:
-            # --- FEATURE UPDATE: Income-centric Pie Chart Allocation ---
+            # Income-centric Pie Chart Allocation 
             if inc > 0:
                 pie_data = cat_totals.copy()
                 
@@ -209,7 +208,7 @@ if not df.empty:
                     savings_row = pd.DataFrame([{"Category": "Savings/Balance", "Amount": net}])
                     pie_data = pd.concat([pie_data, savings_row], ignore_index=True)
                 
-                # Render Pie Chart where total 360-degree circle equals Total Income
+                # Render Pie Chart where total circle equals Total Income
                 pie_chart = alt.Chart(pie_data).mark_arc().encode(
                     theta=alt.Theta(field="Amount", type="quantitative"),
                     color=alt.Color(field="Category", type="nominal", 
@@ -218,7 +217,6 @@ if not df.empty:
                 ).properties(height=350)
                 st.altair_chart(pie_chart, use_container_width=True)
             elif not cat_totals.empty:
-                # Fallback layout: if no income logged, show simple expense-only pie
                 pie_chart = alt.Chart(cat_totals).mark_arc().encode(
                     theta=alt.Theta(field="Amount", type="quantitative"),
                     color=alt.Color(field="Category", type="nominal"),
@@ -231,3 +229,18 @@ else:
     st.info("Start tracking by logging your first transaction above!")
 
 # --- Danger Zone (Clear Database with Password Verification) ---
+st.markdown("<br><br>", unsafe_allow_html=True) 
+with st.expander("⚠️ Danger Zone (Admin Actions)"):
+    st.write("Permanently erase all logged items across all history. This cannot be undone.")
+    confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
+    
+    input_password = st.text_input("Enter Admin Password to verify action:", type="password")
+    is_password_correct = (input_password == "1111")
+    button_disabled = not (confirm_clear and is_password_correct)
+    
+    if st.button("Delete All Records", disabled=button_disabled, type="primary"):
+        pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
+        st.success("Database cleared successfully!")
+        st.rerun()
+    elif confirm_clear and input_password and not is_password_correct:
+        st.error("Incorrect password. Please try again.")
