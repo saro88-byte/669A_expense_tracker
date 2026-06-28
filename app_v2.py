@@ -33,9 +33,8 @@ if not st.session_state["authenticated"]:
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
     # Incomes
-    {"Type": "Income", "Category": "Salary", "Amount": 13800.00, "Description": "Monthly Fixed Salary"},
-    {"Type": "Income", "Category": "Salary", "Amount": 2913.00, "Description": "Monthly Fixed Salary"},
-    
+    {"Type": "Income", "Category": "Salary", "Amount": 0.00, "Description": "Monthly Fixed Salary"},
+        
     # Expenses
     {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 210.00, "Description": "Monthly Home Utilities"},
     {"Type": "Expense", "Category": "School Fees", "Amount": 408.50, "Description": "Kids School Fees"},
