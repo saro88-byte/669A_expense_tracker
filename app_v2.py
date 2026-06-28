@@ -6,10 +6,35 @@ from datetime import datetime
 
 DATA_FILE = "online_finance.csv"
 
+st.set_page_config(layout="wide")
+
+# --- FEATURE UPDATE: Secure Public Login Gate ---
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.title("🔒 Saj Family Finance Tracker - Secure Login")
+    
+    # Simple form wrapper for clean submissions
+    with st.form("login_form"):
+        password_attempt = st.text_input("Enter Family Access Password:", type="password")
+        login_submitted = st.form_submit_button("Access Tracker")
+        
+        if login_submitted:
+            if password_attempt == "1111":
+                st.session_state["authenticated"] = True
+                st.success("Access Granted!")
+                st.rerun()
+            else:
+                st.error("❌ Incorrect password. Access denied.")
+                
+    st.stop() # Crucial: Halts execution of all data engines below until logged in
+
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
     # Incomes
-    {"Type": "Income", "Category": "Salary", "Amount": 00.00, "Description": "Monthly Income"},
+    {"Type": "Income", "Category": "Salary", "Amount": 13800.00, "Description": "Monthly Fixed Salary"},
+    {"Type": "Income", "Category": "Salary", "Amount": 2913.00, "Description": "Monthly Fixed Salary"},
     
     # Expenses
     {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 210.00, "Description": "Monthly Home Utilities"},
@@ -71,7 +96,6 @@ if not os.path.exists(DATA_FILE):
 # Run the automatic recurring items checker on script bootup
 check_and_add_recurring_items()
 
-st.set_page_config(layout="wide")
 st.title("Saj Family Finance Tracker")
 
 # --- Interactive Filter (Outside Form) ---
@@ -201,13 +225,10 @@ if not df.empty:
             # Income-centric Pie Chart Allocation 
             if inc > 0:
                 pie_data = cat_totals.copy()
-                
-                # Append remaining balance/savings if there is any profit left
                 if net > 0:
                     savings_row = pd.DataFrame([{"Category": "Savings/Balance", "Amount": net}])
                     pie_data = pd.concat([pie_data, savings_row], ignore_index=True)
                 
-                # Render clean Pie Chart via standard color encoding mapping
                 pie_chart = alt.Chart(pie_data).mark_arc().encode(
                     theta=alt.Theta(field="Amount", type="quantitative"),
                     color=alt.Color(field="Category", type="nominal"),
@@ -232,7 +253,7 @@ with st.expander("⚠️ Danger Zone (Admin Actions)"):
     st.write("Permanently erase all logged items across all history. This cannot be undone.")
     confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
     
-    input_password = st.text_input("Enter Admin Password to verify action:", type="password")
+    input_password = st.text_input("Enter Admin Password to verify action:", type="password", key="admin_danger_pwd")
     is_password_correct = (input_password == "1111")
     button_disabled = not (confirm_clear and is_password_correct)
     
@@ -241,6 +262,4 @@ with st.expander("⚠️ Danger Zone (Admin Actions)"):
         st.success("Database cleared successfully!")
         st.rerun()
     elif confirm_clear and input_password and not is_password_correct:
-        st.error("Incorrect password. Please try again.")
-
         st.error("Incorrect password. Please try again.")
