@@ -13,7 +13,7 @@ if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.title("🔒 Saj Family Finance Tracker - Secure Login")
+    st.title("🔒 669DASH Finance Tracker - Secure Login")
     
     # Simple form wrapper for clean submissions
     with st.form("login_form"):
@@ -33,14 +33,13 @@ if not st.session_state["authenticated"]:
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
     # Incomes
-    {"Type": "Income", "Category": "Salary", "Amount": 16700.00, "Description": "Monthly Fixed Salary"},
-        
+            
     # Expenses
-    {"Type": "Expense", "Category": "Rent/Utilities", "Amount": 210.00, "Description": "Monthly Home Utilities"},
-    {"Type": "Expense", "Category": "School Fees", "Amount": 408.50, "Description": "Kids School Fees"},
+    {"Type": "Expense", "Category": "Utilities", "Amount": 210.00, "Description": "Monthly Home Utilities"},
+    {"Type": "Expense", "Category": "School Fees", "Amount": 408.50, "Description": "SW School Fees"},
     {"Type": "Expense", "Category": "Internet", "Amount": 60.00, "Description": "Home Fiber Broadband"},
     {"Type": "Expense", "Category": "Phone", "Amount": 138.00, "Description": "Mobile Phone Plan"},
-    {"Type": "Expense", "Category": "Other", "Amount": 735.00, "Description": "Helper"},
+    {"Type": "Expense", "Category": "Domestic Help", "Amount": 735.00, "Description": "Helper"},
     {"Type": "Expense", "Category": "Motor Vehicle", "Amount": 110.00, "Description": "Season Parking"},
 ]
 
@@ -109,13 +108,13 @@ with st.form("entry_form", clear_on_submit=True):
     with col2:
         if t_type == "Expense":
             categories = [
-                "Apparel & Clothing", "Dining", "Entertainment", "Grocery & Provisions",
-                "Household", "Insurance", "Internet", "Medical", "Motor Vehicle",
-                "Online Purchase", "Petrol", "Phone", "Rent/Utilities", "School Fees",
-                "Shopping", "Tuition Fees", "Other"
+                "Apparel & Clothing", "Books", "Dining", "Domestic Help", "Entertainment", "Grocery & Provisions",
+                "Household", "Home Loan", "House Maintenance", "Hostel Fees", "Insurance", "Internet", "Investment", 
+                "IT Expenses", "Medical", "Motor Vehicle", "Online Purchase", "Petrol", "Phone", "School Fees", 
+                "Shopping", "Transportation", "Travel", "Tuition Fees", "Utilities", "Vehicle Loan", "Other"
             ]
         else:
-            categories = ["Salary", "Freelance", "Investments", "Other"]
+            categories = ["Fixed Income", "Freelance", "Investments", "Interest", "Other"]
             
         category = st.selectbox("Category", categories)
     with col3:
