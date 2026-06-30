@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import os
+import io
 from datetime import datetime
 
 DATA_FILE = "online_finance.csv"
@@ -15,7 +16,6 @@ if "authenticated" not in st.session_state:
 if not st.session_state["authenticated"]:
     st.title("🔒 669DASH Finance Tracker - Secure Login")
     
-    # Simple form wrapper for clean submissions
     with st.form("login_form"):
         password_attempt = st.text_input("Enter Family Access Password:", type="password")
         login_submitted = st.form_submit_button("Access Tracker")
@@ -28,7 +28,7 @@ if not st.session_state["authenticated"]:
             else:
                 st.error("❌ Incorrect password. Access denied.")
                 
-    st.stop() # Crucial: Halts execution of all data engines below until logged in
+    st.stop()
 
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
@@ -41,12 +41,7 @@ DEFAULT_ITEMS = [
 ]
 
 def check_and_add_recurring_items(user_entry_date=None):
-    """
-    Scans the timeline and ensures defaults exist for the current month,
-    the month of any new entry being saved, and any gaps in between.
-    """
     df = pd.read_csv(DATA_FILE)
-    
     current_month = datetime.today().strftime("%Y-%m")
     target_months = {current_month}
     
@@ -57,7 +52,6 @@ def check_and_add_recurring_items(user_entry_date=None):
         df_months = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m")
         existing_months = set(df_months.values)
         oldest_date_str = df_months.min()
-        
         all_periods = pd.period_range(start=oldest_date_str, end=current_month, freq='M').astype(str)
         target_months.update(all_periods)
     else:
@@ -70,13 +64,7 @@ def check_and_add_recurring_items(user_entry_date=None):
         for month_str in missing_months:
             default_date = f"{month_str}-01"
             for item in DEFAULT_ITEMS:
-                new_rows.append([
-                    default_date, 
-                    item["Type"], 
-                    item["Category"], 
-                    item["Amount"], 
-                    item["Description"]
-                ])
+                new_rows.append([default_date, item["Type"], item["Category"], item["Amount"], item["Description"]])
                 
         recurring_df = pd.DataFrame(new_rows, columns=["Date", "Type", "Category", "Amount", "Description"])
         df = pd.concat([df, recurring_df], ignore_index=True)
@@ -84,22 +72,16 @@ def check_and_add_recurring_items(user_entry_date=None):
         df.to_csv(DATA_FILE, index=False)
         st.info(f"✨ Automated recurring items for missing months ({', '.join(missing_months)}) initialized!")
 
-# Ensure CSV structure exists
 if not os.path.exists(DATA_FILE):
     pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
 
-# Run the automatic recurring items checker on script bootup
 check_and_add_recurring_items()
 
 st.title("669DASH Finance Tracker")
-
-# --- Interactive Filter (Outside Form) ---
 t_type = st.radio("Select Transaction Type:", ["Expense", "Income"], horizontal=True)
 
-# --- Form Section ---
 with st.form("entry_form", clear_on_submit=True):
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
         t_date = st.date_input("Date", datetime.today())
     with col2:
@@ -112,7 +94,6 @@ with st.form("entry_form", clear_on_submit=True):
             ]
         else:
             categories = ["Fixed Income", "Freelance", "Investments", "Interest", "Other"]
-            
         category = st.selectbox("Category", categories)
     with col3:
         amount = st.number_input("Amount ($)", min_value=0.01, step=0.01)
@@ -123,9 +104,7 @@ with st.form("entry_form", clear_on_submit=True):
     if submitted:
         date_str = t_date.strftime("%Y-%m-%d")
         check_and_add_recurring_items(user_entry_date=date_str)
-        
-        new_data = pd.DataFrame([[date_str, t_type, category, amount, description]], 
-                                columns=["Date", "Type", "Category", "Amount", "Description"])
+        new_data = pd.DataFrame([[date_str, t_type, category, amount, description]], columns=["Date", "Type", "Category", "Amount", "Description"])
         df = pd.read_csv(DATA_FILE)
         df = pd.concat([df, new_data], ignore_index=True)
         df = df.sort_values(by="Date").reset_index(drop=True)
@@ -134,6 +113,13 @@ with st.form("entry_form", clear_on_submit=True):
         st.rerun()
 # --- Data & Visuals Section ---
 df = pd.read_csv(DATA_FILE)
+
+# Helper function to generate cleanly structured Excel files in memory
+def convert_df_to_excel(export_dataframe):
+    output_buffer = io.BytesIO()
+    with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
+        export_dataframe.to_excel(writer, index=False, sheet_name='Financial Records')
+    return output_buffer.getvalue()
 
 if not df.empty:
     df["Date"] = pd.to_datetime(df["Date"])
@@ -163,7 +149,6 @@ if not df.empty:
     monthly_summary["Net Savings"] = monthly_summary["Income"] - monthly_summary["Expense"]
     monthly_summary["Savings Rate"] = (monthly_summary["Net Savings"] / monthly_summary["Income"] * 100).fillna(0.0)
     monthly_summary["Savings Rate"] = monthly_summary["Savings Rate"].apply(lambda x: f"{max(0.0, x):.1f}%")
-    
     monthly_summary = monthly_summary.reindex(month_order).dropna(how="all").fillna(0.0)
     
     formatted_summary = monthly_summary.copy()
@@ -186,6 +171,19 @@ if not df.empty:
     with top_right:
         st.subheader(f"Financial Breakdown ({selected_year})")
         st.dataframe(formatted_summary, use_container_width=True)
+        
+        # Clean export columns before writing file out
+        excel_yearly_df = yearly_df.drop(columns=["YearMonth", "Year", "MonthName"]).copy()
+        excel_yearly_df["Date"] = excel_yearly_df["Date"].dt.strftime("%Y-%m-%d")
+        yearly_excel_data = convert_df_to_excel(excel_yearly_df)
+        
+        st.download_button(
+            label=f"📥 Download Full {selected_year} Statement (.xlsx)",
+            data=yearly_excel_data,
+            file_name=f"Saj_Family_Finance_Full_Year_{selected_year}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
     # ----------------------------------------------------
     # 🌙 MONTHLY DETAILS VIEW
@@ -219,31 +217,41 @@ if not df.empty:
         st.info("💡 Edit cells directly or select a row and press 'Delete' on your keyboard. Click 'Save' below.")
         edited_df = st.data_editor(clean_df, use_container_width=True, num_rows="dynamic")
         
-        if st.button("💾 Save Table Changes", type="primary", use_container_width=True):
-            master_df = pd.read_csv(DATA_FILE)
-            
-            visible_indices = clean_df.index
-            final_indices = edited_df.index
-            deleted_indices = [idx for idx in visible_indices if idx not in final_indices]
-            
-            if deleted_indices:
-                master_df = master_df.drop(index=deleted_indices)
-            
-            columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
-            
-            legacy_edits = edited_df[edited_df.index.isin(master_df.index)]
-            new_appends = edited_df[~edited_df.index.isin(master_df.index)]
-            
-            if not legacy_edits.empty:
-                master_df.loc[legacy_edits.index, columns_to_update] = legacy_edits[columns_to_update]
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("💾 Save Table Changes", type="primary", use_container_width=True):
+                master_df = pd.read_csv(DATA_FILE)
+                visible_indices = clean_df.index
+                final_indices = edited_df.index
+                deleted_indices = [idx for idx in visible_indices if idx not in final_indices]
                 
-            if not new_appends.empty:
-                master_df = pd.concat([master_df, new_appends[columns_to_update]], ignore_index=True)
-            
-            master_df = master_df.sort_values(by="Date").reset_index(drop=True)
-            master_df.to_csv(DATA_FILE, index=False)
-            st.success("Database file rewritten successfully!")
-            st.rerun()
+                if deleted_indices:
+                    master_df = master_df.drop(index=deleted_indices)
+                
+                columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
+                legacy_edits = edited_df[edited_df.index.isin(master_df.index)]
+                new_appends = edited_df[~edited_df.index.isin(master_df.index)]
+                
+                if not legacy_edits.empty:
+                    master_df.loc[legacy_edits.index, columns_to_update] = legacy_edits[columns_to_update]
+                if not new_appends.empty:
+                    master_df = pd.concat([master_df, new_appends[columns_to_update]], ignore_index=True)
+                
+                master_df = master_df.sort_values(by="Date").reset_index(drop=True)
+                master_df.to_csv(DATA_FILE, index=False)
+                st.success("Database file rewritten successfully!")
+                st.rerun()
+                
+        with btn_col2:
+            excel_monthly_df = clean_df.copy()
+            monthly_excel_data = convert_df_to_excel(excel_monthly_df)
+            st.download_button(
+                label=f"📊 Download {selected_month} (.xlsx)",
+                data=monthly_excel_data,
+                file_name=f"Saj_Family_Finance_Month_{selected_month}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
             
     with right:
         st.subheader("Category Expenditure Allocation")
@@ -257,12 +265,10 @@ if not df.empty:
                 color=alt.Color(field="Category", type="nominal", legend=alt.Legend(title="Categories")),
                 tooltip=["Category", "Amount"]
             )
-            
             donut = base_chart.mark_arc(innerRadius=90, outerRadius=140)
             
             total_expense = expense_only["Amount"].sum()
             text_data = pd.DataFrame([{"text": f"${total_expense:,.2f}"}])
-            
             center_text = alt.Chart(text_data).mark_text(
                 fontSize=20, 
                 fontWeight="bold", 
