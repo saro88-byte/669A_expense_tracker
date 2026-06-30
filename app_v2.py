@@ -94,7 +94,7 @@ if not os.path.exists(DATA_FILE):
 # Run the automatic recurring items checker on script bootup
 check_and_add_recurring_items()
 
-st.title("Saj Family Finance Tracker")
+st.title("669DASH Finance Tracker")
 
 # --- Interactive Filter (Outside Form) ---
 t_type = st.radio("Select Transaction Type:", ["Expense", "Income"], horizontal=True)
@@ -208,42 +208,40 @@ if not df.empty:
             )
         
     with right:
-        st.subheader("Financial Breakdown")
-        chart_type = st.selectbox("Choose Chart Type", ["Bar Chart", "Pie Chart"])
+        st.subheader("Category Expenditure Allocation")
         
-        exp_df = filtered_df[filtered_df["Type"] == "Expense"]
-        cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
+        # Standardize strings to prevent accidental income injection
+        clean_type_df = filtered_df.copy()
+        clean_type_df["Type"] = clean_type_df["Type"].astype(str).str.strip().str.capitalize()
         
-        if chart_type == "Bar Chart":
-            if not cat_totals.empty:
-                st.bar_chart(data=cat_totals, x="Category", y="Amount")
-            else:
-                st.write("No expenses logged for this month.")
+        # Strictly isolate Expense rows only
+        expense_only = clean_type_df[clean_type_df["Type"] == "Expense"]
+        
+        if not expense_only.empty:
+            # 1. Base Donut Chart
+            base_chart = alt.Chart(expense_only).encode(
+                theta=alt.Theta(field="Amount", type="quantitative"),
+                color=alt.Color(field="Category", type="nominal", legend=alt.Legend(title="Categories")),
+                tooltip=["Category", "Amount"]
+            )
+            
+            donut = base_chart.mark_arc(innerRadius=90, outerRadius=140)
+            
+            # 2. Text Layer (Displays total expenses inside the center hole)
+            total_expense = expense_only["Amount"].sum()
+            text_data = pd.DataFrame([{"text": f"${total_expense:,.2f}"}])
+            
+            center_text = alt.Chart(text_data).mark_text(
+                fontSize=20, 
+                fontWeight="bold", 
+                color="white" if st.get_option("theme.base") == "dark" else "black"
+            ).encode(text="text:N")
+            
+            # Layer components together
+            final_chart = alt.layer(donut, center_text).properties(height=350)
+            st.altair_chart(final_chart, use_container_width=True)
         else:
-            # Income-centric Pie Chart Allocation 
-            if inc > 0:
-                pie_data = cat_totals.copy()
-                if net > 0:
-                    savings_row = pd.DataFrame([{"Category": "Savings/Balance", "Amount": net}])
-                    pie_data = pd.concat([pie_data, savings_row], ignore_index=True)
-                
-                pie_chart = alt.Chart(pie_data).mark_arc().encode(
-                    theta=alt.Theta(field="Amount", type="quantitative"),
-                    color=alt.Color(field="Category", type="nominal"),
-                    tooltip=["Category", "Amount"]
-                ).properties(height=350)
-                st.altair_chart(pie_chart, use_container_width=True)
-            elif not cat_totals.empty:
-                pie_chart = alt.Chart(cat_totals).mark_arc().encode(
-                    theta=alt.Theta(field="Amount", type="quantitative"),
-                    color=alt.Color(field="Category", type="nominal"),
-                    tooltip=["Category", "Amount"]
-                ).properties(height=350)
-                st.altair_chart(pie_chart, use_container_width=True)
-            else:
-                st.write("No income or expense records found to generate a pie chart.")
-else:
-    st.info("Start tracking by logging your first transaction above!")
+            st.info("No expense allocation data available for this month.")
 
 # --- Danger Zone (Clear Database with Password Verification) ---
 st.markdown("<br><br>", unsafe_allow_html=True) 
