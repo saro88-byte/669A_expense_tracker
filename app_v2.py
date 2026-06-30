@@ -32,9 +32,6 @@ if not st.session_state["authenticated"]:
 
 # --- RECURRING MONTHLY DEFAULTS ---
 DEFAULT_ITEMS = [
-    # Incomes
-            
-    # Expenses
     {"Type": "Expense", "Category": "Utilities", "Amount": 210.00, "Description": "Monthly Home Utilities"},
     {"Type": "Expense", "Category": "School Fees", "Amount": 408.50, "Description": "SW School Fees"},
     {"Type": "Expense", "Category": "Internet", "Amount": 60.00, "Description": "Home Fiber Broadband"},
@@ -140,85 +137,121 @@ df = pd.read_csv(DATA_FILE)
 
 if not df.empty:
     df["Date"] = pd.to_datetime(df["Date"])
+    df["Year"] = df["Date"].dt.year.astype(str)
+    df["MonthName"] = df["Date"].dt.strftime("%b")
     df["YearMonth"] = df["Date"].dt.to_period("M")
-    available_months = df["YearMonth"].unique().astype(str)
     
+    # ----------------------------------------------------
+    # 📅 FEATURE: MONTHLY OVERVIEW BY YEAR
+    # ----------------------------------------------------
     st.markdown("---")
-    selected_month = st.selectbox("Filter Visuals by Month", sorted(available_months, reverse=True))
+    st.header("📅 Monthly Overview by Year")
+    
+    available_years = sorted(df["Year"].unique(), reverse=True)
+    selected_year = st.selectbox("Select Target Year", available_years)
+    
+    yearly_df = df[df["Year"] == selected_year].copy()
+    yearly_df["Type"] = yearly_df["Type"].astype(str).str.strip().str.capitalize()
+    
+    month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    monthly_summary = yearly_df.groupby(["MonthName", "Type"])["Amount"].sum().unstack(fill_value=0.0)
+    
+    for t in ["Income", "Expense"]:
+        if t not in monthly_summary.columns:
+            monthly_summary[t] = 0.0
+            
+    monthly_summary["Net Savings"] = monthly_summary["Income"] - monthly_summary["Expense"]
+    monthly_summary["Savings Rate"] = (monthly_summary["Net Savings"] / monthly_summary["Income"] * 100).fillna(0.0)
+    monthly_summary["Savings Rate"] = monthly_summary["Savings Rate"].apply(lambda x: f"{max(0.0, x):.1f}%")
+    
+    monthly_summary = monthly_summary.reindex(month_order).dropna(how="all").fillna(0.0)
+    
+    formatted_summary = monthly_summary.copy()
+    for col in ["Income", "Expense", "Net Savings"]:
+        formatted_summary[col] = formatted_summary[col].apply(lambda x: f"${x:,.2f}")
+    
+    top_left, top_right = st.columns(2)
+    with top_left:
+        st.subheader(f"Monthly Trends ({selected_year})")
+        trend_grouped = yearly_df.groupby(["MonthName", "Type"])["Amount"].sum().reset_index()
+        
+        trend_chart = alt.Chart(trend_grouped).mark_bar().encode(
+            x=alt.X("MonthName:N", sort=month_order, title="Month"),
+            y=alt.Y("Amount:Q", title="Amount ($)"),
+            color=alt.Color("Type:N", scale=alt.Scale(domain=["Income", "Expense"], range=["#2ecc71", "#e74c3c"])),
+            xOffset="Type:N"
+        ).properties(height=280).interactive()
+        st.altair_chart(trend_chart, use_container_width=True)
+        
+    with top_right:
+        st.subheader(f"Financial Breakdown ({selected_year})")
+        st.dataframe(formatted_summary, use_container_width=True)
+
+    # ----------------------------------------------------
+    # 🌙 MONTHLY DETAILS VIEW
+    # ----------------------------------------------------
+    st.markdown("---")
+    st.header("🌙 Monthly Details & Management")
+    
+    filtered_months = df[df["Year"] == selected_year]["YearMonth"].unique().astype(str)
+    selected_month = st.selectbox("Select Month for Detailed Review / Editing", sorted(filtered_months, reverse=True))
     
     filtered_df = df[df["YearMonth"].astype(str) == selected_month]
     
-    # Calculations
     inc = filtered_df[filtered_df["Type"] == "Income"]["Amount"].sum()
     exp = filtered_df[filtered_df["Type"] == "Expense"]["Amount"].sum()
     net = inc - exp
+    savings_rate_display = f"{max(0.0, (net / inc * 100)):.1f}%" if inc > 0 else "0.0%"
     
-    if inc > 0:
-        savings_rate = (net / inc) * 100
-        savings_rate_display = f"{max(0.0, savings_rate):.1f}%"
-    else:
-        savings_rate_display = "0.0%"
-    
-    # KPI metrics display
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Income", f"${inc:,.2f}")
     c2.metric("Total Expenses", f"${exp:,.2f}")
     c3.metric("Net Profit", f"${net:,.2f}", delta=f"{net:,.2f}")
     c4.metric("Savings Rate", savings_rate_display, delta="Target: >20%" if inc > 0 else None, delta_color="off")
     
-    # Visual Layout Split
     left, right = st.columns(2)
     with left:
         st.subheader(f"Transactions for {selected_month}")
         display_df = filtered_df.copy()
         display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
-        clean_df = display_df.drop(columns=["YearMonth"])
+        clean_df = display_df.drop(columns=["YearMonth", "Year", "MonthName"])
         
         st.info("💡 Edit cells directly or select a row and press 'Delete' on your keyboard. Click 'Save' below.")
         edited_df = st.data_editor(clean_df, use_container_width=True, num_rows="dynamic")
         
-        # Save and Download Buttons Layout
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            if st.button("💾 Save Table Changes", type="secondary", use_container_width=True):
-                master_df = pd.read_csv(DATA_FILE)
+        if st.button("💾 Save Table Changes", type="primary", use_container_width=True):
+            master_df = pd.read_csv(DATA_FILE)
+            
+            visible_indices = clean_df.index
+            final_indices = edited_df.index
+            deleted_indices = [idx for idx in visible_indices if idx not in final_indices]
+            
+            if deleted_indices:
+                master_df = master_df.drop(index=deleted_indices)
+            
+            columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
+            
+            legacy_edits = edited_df[edited_df.index.isin(master_df.index)]
+            new_appends = edited_df[~edited_df.index.isin(master_df.index)]
+            
+            if not legacy_edits.empty:
+                master_df.loc[legacy_edits.index, columns_to_update] = legacy_edits[columns_to_update]
                 
-                remaining_indices = edited_df.index
-                deleted_indices = [idx for idx in clean_df.index if idx not in remaining_indices]
-                
-                if deleted_indices:
-                    master_df = master_df.drop(index=deleted_indices)
-                
-                columns_to_update = ["Date", "Type", "Category", "Amount", "Description"]
-                if not edited_df.empty:
-                    master_df.loc[edited_df.index, columns_to_update] = edited_df[columns_to_update]
-                
-                master_df.to_csv(DATA_FILE, index=False)
-                st.success("Changes saved successfully!")
-                st.rerun()
-                
-        with btn_col2:
-            csv_data = clean_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label=f"📥 Download {selected_month} (CSV)",
-                data=csv_data,
-                file_name=f"finance_data_{selected_month}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
+            if not new_appends.empty:
+                master_df = pd.concat([master_df, new_appends[columns_to_update]], ignore_index=True)
+            
+            master_df = master_df.sort_values(by="Date").reset_index(drop=True)
+            master_df.to_csv(DATA_FILE, index=False)
+            st.success("Database file rewritten successfully!")
+            st.rerun()
+            
     with right:
         st.subheader("Category Expenditure Allocation")
-        
-        # Standardize strings to prevent accidental income injection
         clean_type_df = filtered_df.copy()
         clean_type_df["Type"] = clean_type_df["Type"].astype(str).str.strip().str.capitalize()
-        
-        # Strictly isolate Expense rows only
         expense_only = clean_type_df[clean_type_df["Type"] == "Expense"]
         
         if not expense_only.empty:
-            # 1. Base Donut Chart
             base_chart = alt.Chart(expense_only).encode(
                 theta=alt.Theta(field="Amount", type="quantitative"),
                 color=alt.Color(field="Category", type="nominal", legend=alt.Legend(title="Categories")),
@@ -227,7 +260,6 @@ if not df.empty:
             
             donut = base_chart.mark_arc(innerRadius=90, outerRadius=140)
             
-            # 2. Text Layer (Displays total expenses inside the center hole)
             total_expense = expense_only["Amount"].sum()
             text_data = pd.DataFrame([{"text": f"${total_expense:,.2f}"}])
             
@@ -237,25 +269,7 @@ if not df.empty:
                 color="white" if st.get_option("theme.base") == "dark" else "black"
             ).encode(text="text:N")
             
-            # Layer components together
             final_chart = alt.layer(donut, center_text).properties(height=350)
             st.altair_chart(final_chart, use_container_width=True)
         else:
             st.info("No expense allocation data available for this month.")
-
-# --- Danger Zone (Clear Database with Password Verification) ---
-st.markdown("<br><br>", unsafe_allow_html=True) 
-with st.expander("⚠️ Danger Zone (Admin Actions)"):
-    st.write("Permanently erase all logged items across all history. This cannot be undone.")
-    confirm_clear = st.checkbox("I confirm that I want to wipe out the database.")
-    
-    input_password = st.text_input("Enter Admin Password to verify action:", type="password", key="admin_danger_pwd")
-    is_password_correct = (input_password == "1111")
-    button_disabled = not (confirm_clear and is_password_correct)
-    
-    if st.button("Delete All Records", disabled=button_disabled, type="primary"):
-        pd.DataFrame(columns=["Date", "Type", "Category", "Amount", "Description"]).to_csv(DATA_FILE, index=False)
-        st.success("Database cleared successfully!")
-        st.rerun()
-    elif confirm_clear and input_password and not is_password_correct:
-        st.error("Incorrect password. Please try again.")
