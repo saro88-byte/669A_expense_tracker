@@ -45,11 +45,15 @@ def check_and_add_recurring_items(user_entry_date=None):
     current_month = datetime.today().strftime("%Y-%m")
     target_months = {current_month}
     
+    # Correctly parse standard format if incoming string length is provided
     if user_entry_date:
-        target_months.add(user_entry_date[:7])
+        if "-" in user_entry_date and user_entry_date.index("-") == 2: # Check if it is DD-MM-YYYY
+            target_months.add(f"{user_entry_date[6:10]}-{user_entry_date[3:5]}")
+        else:
+            target_months.add(user_entry_date[:7])
         
     if not df.empty:
-        df_months = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m")
+        df_months = pd.to_datetime(df["Date"], dayfirst=True).dt.strftime("%Y-%m")
         existing_months = set(df_months.values)
         oldest_date_str = df_months.min()
         all_periods = pd.period_range(start=oldest_date_str, end=current_month, freq='M').astype(str)
@@ -62,13 +66,16 @@ def check_and_add_recurring_items(user_entry_date=None):
     if missing_months:
         new_rows = []
         for month_str in missing_months:
-            default_date = f"{month_str}-01"
+            # Save initialized recurring items cleanly in target format
+            default_date = f"01-{month_str[5:7]}-{month_str[0:4]}"
             for item in DEFAULT_ITEMS:
                 new_rows.append([default_date, item["Type"], item["Category"], item["Amount"], item["Description"]])
                 
         recurring_df = pd.DataFrame(new_rows, columns=["Date", "Type", "Category", "Amount", "Description"])
         df = pd.concat([df, recurring_df], ignore_index=True)
-        df = df.sort_values(by="Date").reset_index(drop=True)
+        # Temporary parsing logic just for correct timelines chronological sorting
+        df["_temp_date"] = pd.to_datetime(df["Date"], dayfirst=True)
+        df = df.sort_values(by="_temp_date").drop(columns=["_temp_date"]).reset_index(drop=True)
         df.to_csv(DATA_FILE, index=False)
         st.info(f"✨ Automated recurring items for missing months ({', '.join(missing_months)}) initialized!")
 
@@ -83,7 +90,8 @@ t_type = st.radio("Select Transaction Type:", ["Expense", "Income"], horizontal=
 with st.form("entry_form", clear_on_submit=True):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        t_date = st.date_input("Date", datetime.today())
+        # Streamlit date selector UI component format configuration override
+        t_date = st.date_input("Date", datetime.today(), format="DD-MM-YYYY")
     with col2:
         if t_type == "Expense":
             categories = [
@@ -102,19 +110,22 @@ with st.form("entry_form", clear_on_submit=True):
         
     submitted = st.form_submit_button("Save Transaction")
     if submitted:
-        date_str = t_date.strftime("%Y-%m-%d")
+        # Enforce output string serialization mapping pattern
+        date_str = t_date.strftime("%d-%m-%Y")
         check_and_add_recurring_items(user_entry_date=date_str)
         new_data = pd.DataFrame([[date_str, t_type, category, amount, description]], columns=["Date", "Type", "Category", "Amount", "Description"])
         df = pd.read_csv(DATA_FILE)
         df = pd.concat([df, new_data], ignore_index=True)
-        df = df.sort_values(by="Date").reset_index(drop=True)
+        
+        # Chronological file layout sorting engine adjustment
+        df["_temp_date"] = pd.to_datetime(df["Date"], dayfirst=True)
+        df = df.sort_values(by="_temp_date").drop(columns=["_temp_date"]).reset_index(drop=True)
         df.to_csv(DATA_FILE, index=False)
         st.success("Transaction saved successfully!")
         st.rerun()
 # --- Data & Visuals Section ---
 df = pd.read_csv(DATA_FILE)
 
-# Helper function to generate cleanly structured Excel files in memory
 def convert_df_to_excel(export_dataframe):
     output_buffer = io.BytesIO()
     with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
@@ -122,7 +133,8 @@ def convert_df_to_excel(export_dataframe):
     return output_buffer.getvalue()
 
 if not df.empty:
-    df["Date"] = pd.to_datetime(df["Date"])
+    # Explicitly enforce European/International structural date layout flags
+    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
     df["Year"] = df["Date"].dt.year.astype(str)
     df["MonthName"] = df["Date"].dt.strftime("%b")
     df["YearMonth"] = df["Date"].dt.to_period("M")
@@ -172,15 +184,14 @@ if not df.empty:
         st.subheader(f"Financial Breakdown ({selected_year})")
         st.dataframe(formatted_summary, use_container_width=True)
         
-        # Clean export columns before writing file out
         excel_yearly_df = yearly_df.drop(columns=["YearMonth", "Year", "MonthName"]).copy()
-        excel_yearly_df["Date"] = excel_yearly_df["Date"].dt.strftime("%Y-%m-%d")
+        excel_yearly_df["Date"] = excel_yearly_df["Date"].dt.strftime("%d-%m-%Y")
         yearly_excel_data = convert_df_to_excel(excel_yearly_df)
         
         st.download_button(
             label=f"📥 Download Full {selected_year} Statement (.xlsx)",
             data=yearly_excel_data,
-            file_name=f"Saj_Family_Finance_Full_Year_{selected_year}.xlsx",
+            file_name=f"669DASH_Expense_Full_Year_{selected_year}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
@@ -211,7 +222,7 @@ if not df.empty:
     with left:
         st.subheader(f"Transactions for {selected_month}")
         display_df = filtered_df.copy()
-        display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
+        display_df["Date"] = display_df["Date"].dt.strftime("%d-%m-%Y")
         clean_df = display_df.drop(columns=["YearMonth", "Year", "MonthName"])
         
         st.info("💡 Edit cells directly or select a row and press 'Delete' on your keyboard. Click 'Save' below.")
@@ -237,7 +248,8 @@ if not df.empty:
                 if not new_appends.empty:
                     master_df = pd.concat([master_df, new_appends[columns_to_update]], ignore_index=True)
                 
-                master_df = master_df.sort_values(by="Date").reset_index(drop=True)
+                master_df["_temp_date"] = pd.to_datetime(master_df["Date"], dayfirst=True)
+                master_df = master_df.sort_values(by="_temp_date").drop(columns=["_temp_date"]).reset_index(drop=True)
                 master_df.to_csv(DATA_FILE, index=False)
                 st.success("Database file rewritten successfully!")
                 st.rerun()
@@ -248,7 +260,7 @@ if not df.empty:
             st.download_button(
                 label=f"📊 Download {selected_month} (.xlsx)",
                 data=monthly_excel_data,
-                file_name=f"Saj_Family_Finance_Month_{selected_month}.xlsx",
+                file_name=f"669DASH_Expense_Month_{selected_month}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
